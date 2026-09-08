@@ -1,26 +1,25 @@
 /*
- * random_bot.c - Example bot that makes random legal moves.
+ * flipflop_5x5_bot.c - Example bot that connects to the game server and plays
+ * flipflop_5x5 by choosing a legal move each turn.
  *
  * Usage (matchmade):
- *   export BOT1_ID=your-bot-id
- *   export BOT1_KEY=your-bot-api-key
- *   ./random_bot
+ *   export BOT2_ID=your-bot-id
+ *   export BOT2_KEY=your-bot-api-key
+ *   ./flipflop_5x5_bot
  *
  * Usage (continuous matchmade):
- *   export BOT1_ID=your-bot-id
- *   export BOT1_KEY=your-bot-api-key
- *   ./random_bot --continuous
+ *   export BOT2_ID=your-bot-id
+ *   export BOT2_KEY=your-bot-api-key
+ *   ./flipflop_5x5_bot --continuous
  *
  * Usage (practice):
  *   export ROOM_ID=your-room-id
- *   export BOT1_ID=your-bot-id
- *   export BOT1_KEY=your-bot-api-key
- *   ./random_bot --practice
+ *   export BOT2_ID=your-bot-id
+ *   export BOT2_KEY=your-bot-api-key
+ *   ./flipflop_5x5_bot --practice
  */
 
 #include <arena/arena.h>
-#include <ctype.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,88 +55,17 @@ static void on_game_start(const arena_game_state_t *state, void *ud)
         arena_side_str(state->current_turn));
 }
 
-static int board_size_from_string(const char *board)
+static void on_move(const arena_game_state_t *state, arena_move_t *move, void *ud)
 {
-    if (!board || !board[0])
-        return 3;
+    /* Choose a random legal piece and destination, mirroring the behavior of
+     * the stock random bot while defaulting to the 5x5 game type. */
+    size_t pi = (size_t)rand() % state->legal_moves_count;
+    const arena_piece_moves_t *piece = &state->legal_moves[pi];
 
-    size_t len = strlen(board);
-    if (len >= 25)
-        return 5;
-    if (len >= 9)
-        return 3;
-    return 3;
-}
+    size_t mi = (size_t)rand() % piece->valid_moves_count;
 
-static int destination_score(const char *board, const char *destination)
-{
-    if (!destination || destination[0] == '\0' || strcmp(destination, "HAND") == 0)
-        return 0;
-
-    int col = 0;
-    int row = 0;
-    int saw_digit = 0;
-
-    for (const char *p = destination; *p; ++p) {
-        unsigned char ch = (unsigned char)*p;
-        if (ch >= 'A' && ch <= 'Z')
-            col = ch - 'A';
-        else if (ch >= 'a' && ch <= 'z')
-            col = ch - 'a';
-        else if (ch >= '0' && ch <= '9') {
-            row = atoi(p);
-            saw_digit = 1;
-            break;
-        }
-    }
-
-    if (!saw_digit)
-        return 0;
-
-    int board_size = board_size_from_string(board);
-    int center = board_size / 2;
-    int distance = abs(col - center) + abs((row - 1) - center);
-    return 10 - distance;
-}
-
-static void choose_best_move(const arena_game_state_t *state, arena_move_t *move, void *ud)
-{
-    size_t best_piece_index = 0;
-    size_t best_move_index = 0;
-    int best_score = INT_MIN;
-
-    for (size_t pi = 0; pi < state->legal_moves_count; ++pi) {
-        const arena_piece_moves_t *piece = &state->legal_moves[pi];
-        if (piece->valid_moves_count == 0)
-            continue;
-
-        int piece_score = 0;
-        size_t local_best_move = 0;
-
-        for (size_t mi = 0; mi < piece->valid_moves_count; ++mi) {
-            int score = destination_score(state->board, piece->valid_moves[mi]);
-            if (strcmp(piece->pos, "HAND") == 0)
-                score += 4;
-            score += (int)piece->valid_moves_count * 3;
-            if (score > piece_score) {
-                piece_score = score;
-                local_best_move = mi;
-            }
-        }
-
-        if (piece->has_splitting && piece->splitting)
-            piece_score += 2;
-
-        if (piece_score > best_score) {
-            best_score = piece_score;
-            best_piece_index = pi;
-            best_move_index = local_best_move;
-        }
-    }
-
-    const arena_piece_moves_t *piece = &state->legal_moves[best_piece_index];
     move->from_pos = piece->pos;
-    move->to_pos = piece->valid_moves[best_move_index];
+    move->to_pos   = piece->valid_moves[mi];
 
     if (strcmp(piece->pos, "HAND") == 0)
         move->side = piece->name;
@@ -146,13 +74,7 @@ static void choose_best_move(const arena_game_state_t *state, arena_move_t *move
 
     move->splitting = piece->has_splitting ? piece->splitting : false;
 
-    printf("[bot %.8s] Move: %s -> %s (heuristic score=%d)\n",
-           (const char *)ud, move->from_pos, move->to_pos, best_score);
-}
-
-static void on_move(const arena_game_state_t *state, arena_move_t *move, void *ud)
-{
-    choose_best_move(state, move, ud);
+    printf("[bot %.8s] Move: %s -> %s\n", (const char *)ud, move->from_pos, move->to_pos);
 }
 
 static void on_game_end(const arena_game_end_t *state, void *ud)
@@ -178,10 +100,10 @@ int main(int argc, char **argv)
 {
     srand((unsigned)time(NULL));
 
-    const char *bot_id  = getenv("BOT1_ID");
-    const char *api_key = getenv("BOT1_KEY");
+    const char *bot_id  = getenv("BOT2_ID");
+    const char *api_key = getenv("BOT2_KEY");
     if (!bot_id || !api_key) {
-        fprintf(stderr, "Error: set BOT1_ID and BOT1_KEY environment variables.\n");
+        fprintf(stderr, "Error: set BOT2_ID and BOT2_KEY environment variables.\n");
         return 1;
     }
 
@@ -201,8 +123,8 @@ int main(int argc, char **argv)
         .user_data = (void *)bot_id,
     };
 
-    /* Parse game type from args (default: flipflop_3x3) */
-    arena_game_type_t game_type = ARENA_GAME_FLIPFLOP_3X3;
+    /* Parse game type from args (default: flipflop_5x5) */
+    arena_game_type_t game_type = ARENA_GAME_FLIPFLOP_5X5;
     int practice_mode = 0;
     int continuous_mode = 0;
 
